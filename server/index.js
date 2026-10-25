@@ -20,10 +20,15 @@ const app = express();
 app.disable('x-powered-by');
 const cleanComplaintText = (value) => String(value || '').replaceAll('`', '').trim();
 const port = Number(process.env.PORT || 4000);
-const publicUrl = String(process.env.PUBLIC_URL || process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
+const normalizeOrigin = (value) => String(value || '').trim().replace(/\/$/, '');
+const publicUrl = normalizeOrigin(process.env.PUBLIC_URL || process.env.CLIENT_URL || 'http://localhost:5173');
 const uploadDir = path.resolve(process.env.UPLOAD_DIR || 'uploads');
 fs.mkdirSync(uploadDir, { recursive: true });
-const allowedOrigins = new Set([publicUrl, process.env.CLIENT_URL || 'http://localhost:5173']);
+const allowedOrigins = new Set([
+  publicUrl,
+  normalizeOrigin(process.env.CLIENT_URL || 'http://localhost:5173'),
+  'https://campuscare-azure.vercel.app'
+]);
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.has(origin)) return callback(null, true);
