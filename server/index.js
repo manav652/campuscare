@@ -53,7 +53,8 @@ const requestOtpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standa
 const verifyOtpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 8, standardHeaders: true, keyGenerator: otpKey, handler: otpRateLimitHandler });
 const complaintOtpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true, keyGenerator: (req) => `${req.ip}:${req.user?.sub || 'anonymous'}` });
 const adminLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true });
-const cookieOptions = `HttpOnly; Path=/; SameSite=Lax; Max-Age=${2 * 60 * 60}${process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === 'true' ? '; Secure' : ''}`;
+const cookieSameSite = process.env.COOKIE_SAMESITE || (process.env.NODE_ENV === 'production' ? 'None' : 'Lax');
+const cookieOptions = `HttpOnly; Path=/; SameSite=${cookieSameSite}; Max-Age=${2 * 60 * 60}${process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === 'true' ? '; Secure' : ''}`;
 const setSessionCookie = (res, token) => res.setHeader('Set-Cookie', `campuscare_session=${encodeURIComponent(token)}; ${cookieOptions}`);
 const readCookie = (req, name) => Object.fromEntries((req.get('cookie') || '').split(';').map((part) => part.trim().split('=').map(decodeURIComponent)).filter(([key, value]) => key && value))[name];
 const oauthCookieOptions = 'HttpOnly; Path=/; SameSite=Lax; Max-Age=600';
