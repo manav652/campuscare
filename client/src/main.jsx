@@ -11,7 +11,17 @@ const cleanComplaintText = (value) => String(value ?? '').replaceAll('`', '');
 const titleCase = (value) => String(value ?? '').toLowerCase().replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 const api = async (path, options = {}) => {
   const headers = options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' };
-  const response = await fetch(`${API}${path}`, { ...options, credentials: 'include', headers: { ...headers, ...(options.headers || {}) } });
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 20000);
+  let response;
+  try {
+    response = await fetch(`${API}${path}`, { ...options, credentials: 'include', signal: controller.signal, headers: { ...headers, ...(options.headers || {}) } });
+  } catch (error) {
+    if (error.name === 'AbortError') throw new Error('The request timed out. Please check email delivery and try again.');
+    throw new Error('Could not reach the server. Please try again.');
+  } finally {
+    window.clearTimeout(timeout);
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
   return data;
