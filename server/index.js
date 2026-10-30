@@ -61,6 +61,7 @@ const adminLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHe
 const cookieSameSite = process.env.COOKIE_SAMESITE || (process.env.NODE_ENV === 'production' ? 'None' : 'Lax');
 const cookieOptions = `HttpOnly; Path=/; SameSite=${cookieSameSite}; Max-Age=${2 * 60 * 60}${process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === 'true' ? '; Secure' : ''}`;
 const setSessionCookie = (res, token) => res.setHeader('Set-Cookie', `campuscare_session=${encodeURIComponent(token)}; ${cookieOptions}`);
+const clearSessionCookie = () => `campuscare_session=; HttpOnly; Path=/; SameSite=${cookieSameSite}; Max-Age=0${process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === 'true' ? '; Secure' : ''}`;
 const readCookie = (req, name) => Object.fromEntries((req.get('cookie') || '').split(';').map((part) => part.trim().split('=').map(decodeURIComponent)).filter(([key, value]) => key && value))[name];
 const oauthCookieOptions = 'HttpOnly; Path=/; SameSite=Lax; Max-Age=600';
 const upload = multer({
@@ -91,6 +92,24 @@ function transporter() {
     greetingTimeout: 10000,
     socketTimeout: 15000
   });
+}
+
+async function sendMailWithTimeout(mailer, message) {
+  let timer;
+  try {
+    return await Promise.race([
+      mailer.sendMail(message),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          const error = new Error('Email provider did not respond in time');
+          error.code = 'ETIMEDOUT';
+          reject(error);
+        }, 18000);
+      })
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function createTicketId() {
@@ -139,7 +158,7 @@ async function sendComplaintOtp(email, challengeId) {
     expiresAt: new Date(Date.now() + 5 * 60 * 1000)
   });
   try {
-    await mailer.sendMail({
+    await sendMailWithTimeout(mailer, {
       from: process.env.MAIL_FROM || process.env.SMTP_USER,
       to: email,
       subject: 'Verify your CampusCare complaint',
@@ -155,7 +174,7 @@ async function sendComplaintOtp(email, challengeId) {
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.get('/api/meta', (_req, res) => res.json({ categories, subcategories, statuses }));
-app.post('/api/auth/logout', (_req, res) => { res.setHeader('Set-Cookie', 'campuscare_session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0'); res.json({ ok: true }); });
+app.post('/api/auth/logout', (_req, res) => { res.setHeader('Set-Cookie', clearSessionCookie()); res.json({ ok: true }); });
 app.get('/api/notifications', auth(), async (req, res, next) => {
   try {
     const notifications = await Notification.find({ user: req.user.sub }).sort({ createdAt: -1 }).limit(30);
@@ -190,7 +209,7 @@ app.post('/api/auth/request-otp', requestOtpLimiter, async (req, res, next) => {
       return res.status(503).json({ error: 'Email delivery is not configured' });
     }
     try {
-      await mailer.sendMail({ from: process.env.MAIL_FROM || process.env.SMTP_USER, to: email, subject: 'Your complaint portal sign-in code', text: `Your code is ${code}. It expires in 10 minutes.` });
+      await sendMailWithTimeout(mailer, { from: process.env.MAIL_FROM || process.env.SMTP_USER, to: email, subject: 'Your complaint portal sign-in code', text: `Your code is ${code}. It expires in 10 minutes.` });
     } catch (mailError) {
       await Otp.deleteOne({ _id: otp._id });
       console.error('Login OTP email delivery failed:', mailError.message);
@@ -240,7 +259,10 @@ if (googleConfigured) {
 app.get('/api/auth/google', (req, res, next) => {
   if (!googleConfigured) return res.status(503).json({ error: 'Google OAuth is not configured' });
   const state = crypto.randomBytes(32).toString('hex');
-  res.setHeader('Set-Cookie', `campuscare_oauth_${state}=${state}; ${oauthCookieOptions}`);
+  res.setHeader('Set-Cookie', [
+    clearSessionCookie(),
+    `campuscare_oauth_${state}=${state}; ${oauthCookieOptions}`
+  ]);
   passport.authenticate('google', { scope: ['openid', 'email', 'profile'], session: false, state })(req, res, next);
 });
 
@@ -305,7 +327,7 @@ app.post('/api/account/deletion', auth(['student']), async (req, res, next) => {
     } catch (notificationError) {
       console.warn('Deletion notification could not be created', notificationError.message);
     }
-    res.setHeader('Set-Cookie', 'campuscare_session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0');
+    res.setHeader('Set-Cookie', clearSessionCookie());
     res.status(201).json({ request: { id: request._id, type: request.type, status: request.status, createdAt: request.createdAt } });
   } catch (error) { next(error); }
 });
