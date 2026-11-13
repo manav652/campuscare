@@ -1,6 +1,6 @@
 # CampusCare
 
-CampusCare is a full-stack college complaint portal for students and authorized administrators. Students can sign in with email OTP or Google, complete their profile, submit verified complaints, upload limited PDF/JPEG evidence, track status history, and request account deletion. Administrators can review complaints, update statuses, manage student accounts, review deletion requests, and export authorized reports.
+CampusCare is a full-stack college complaint portal for students and authorized administrators. Students can sign in with email OTP or Google, complete their profile, submit verified complaints, upload limited PDF/JPEG evidence, track status history, and request account deletion. Administrators can review complaints, update statuses, manage student accounts, review deletion requests, and export authorized report.
 
 ## Preview
 
