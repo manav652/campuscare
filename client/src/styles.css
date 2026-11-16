@@ -172,6 +172,13 @@ textarea { min-height: 150px; resize: vertical; }
 .category-row:nth-child(4) .category-track span { background: #16a875; }
 .category-row:nth-child(5) .category-track span { background: #6b78c9; }
 .dashboard-recent { margin-bottom: 28px; }
+.admin-dashboard .dashboard-top { margin-bottom: 24px; }
+.admin-content-grid { align-items: start; }
+.admin-content-grid .admin-complaints, .admin-content-grid .dashboard-breakdown { min-height: 390px; }
+.admin-kpis > div:nth-child(1) { border-top-color: #2878d4; }
+.admin-kpis > div:nth-child(2) { border-top-color: #e29b24; }
+.admin-kpis > div:nth-child(3) { border-top-color: #16a875; }
+.admin-kpis > div:nth-child(4) { border-top-color: #6b78c9; }
 .welcome-card { display: flex; justify-content: space-between; gap: 24px; padding: clamp(24px, 5vw, 48px); margin-bottom: 22px; }
 .welcome-card h2 { margin: 8px 0; font-size: clamp(1.6rem, 3vw, 2.5rem); line-height: 1.05; }
 .welcome-card p { color: var(--muted); }
