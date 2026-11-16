@@ -142,6 +142,10 @@ textarea { min-height: 150px; resize: vertical; }
 .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(280px, 1fr); gap: 18px; margin-bottom: 18px; }
 .dashboard-kpis { margin-bottom: 18px; }
 .dashboard-kpis > div { min-height: 132px; align-content: center; }
+.dashboard-kpis > div:nth-child(1) { border-top: 3px solid #2878d4; background: color-mix(in srgb, #2878d4 7%, var(--glass)); }
+.dashboard-kpis > div:nth-child(2) { border-top: 3px solid #e29b24; background: color-mix(in srgb, #e29b24 7%, var(--glass)); }
+.dashboard-kpis > div:nth-child(3) { border-top: 3px solid #16a875; background: color-mix(in srgb, #16a875 7%, var(--glass)); }
+.dashboard-kpis > div:nth-child(4) { border-top: 3px solid #6b78c9; background: color-mix(in srgb, #6b78c9 7%, var(--glass)); }
 .kpi-label { color: var(--muted); font-size: .82rem; font-weight: 650; }
 .dashboard-kpis strong { font-size: 2.15rem; line-height: 1.1; }
 .dashboard-kpis small { color: var(--muted); }
@@ -154,12 +158,19 @@ textarea { min-height: 150px; resize: vertical; }
 .activity-column small { color: var(--muted); font-size: .72rem; }
 .activity-value { min-height: 1em; color: var(--brand); font-size: .72rem; font-weight: 700; }
 .activity-bar { width: min(28px, 70%); min-height: 8px; border-radius: 6px 6px 0 0; background: var(--brand); transition: height .25s ease; }
+.activity-column:nth-child(3n + 1) .activity-bar { background: #2878d4; }
+.activity-column:nth-child(3n + 2) .activity-bar { background: #16a875; }
+.activity-column:nth-child(3n) .activity-bar { background: #e29b24; }
 .category-row { display: grid; gap: 8px; margin: 18px 0; }
 .category-row > div:first-child { display: flex; justify-content: space-between; gap: 12px; font-size: .8rem; }
 .category-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .category-row span { color: var(--muted); white-space: nowrap; }
 .category-track { height: 7px; overflow: hidden; border-radius: 4px; background: var(--surface-muted); }
 .category-track span { display: block; height: 100%; border-radius: inherit; background: var(--brand); }
+.category-row:nth-child(2) .category-track span { background: #2878d4; }
+.category-row:nth-child(3) .category-track span { background: #e29b24; }
+.category-row:nth-child(4) .category-track span { background: #16a875; }
+.category-row:nth-child(5) .category-track span { background: #6b78c9; }
 .dashboard-recent { margin-bottom: 28px; }
 .welcome-card { display: flex; justify-content: space-between; gap: 24px; padding: clamp(24px, 5vw, 48px); margin-bottom: 22px; }
 .welcome-card h2 { margin: 8px 0; font-size: clamp(1.6rem, 3vw, 2.5rem); line-height: 1.05; }
