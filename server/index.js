@@ -312,6 +312,10 @@ app.post('/api/auth/password', passwordAuthLimiter, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+app.use(['/api/auth/request-otp', '/api/auth/verify-otp', '/api/complaints/verification'], (_req, res) => {
+  res.status(410).json({ error: 'Email OTP verification is no longer used. Sign in with your password and submit complaints from your authenticated account.' });
+});
+
 app.post('/api/auth/request-otp', requestOtpLimiter, async (req, res, next) => {
   try {
     await cleanupDueDeletions();

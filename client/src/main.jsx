@@ -200,7 +200,7 @@ function NotFound() {
 
 function LegalPage({ type }) {
   const privacy = type === 'privacy';
-  return <section className="panel legal-page"><div className="page-tools"><BackButton /></div><p className="eyebrow">{privacy ? 'PRIVACY' : 'TERMS'}</p><h1>{privacy ? 'Privacy Policy' : 'Terms & Conditions'}</h1><p className="muted">Project policy · Last updated: 25 October 2026</p>{privacy ? <><h2>Information we collect</h2><p>CampusCare may collect your email address, name, student UID, guardian name, course, semester, section, mobile number, complaint details, attachments, replies, status history, and security logs needed to operate the support service.</p><h2>Why we use it</h2><p>We use this information to authenticate students, receive and track complaints, communicate about a complaint, protect the service, and provide authorized administrative reports.</p><h2>Who can access it</h2><p>Your complaint and profile are available to you and authorized CampusCare administrators. Internal notes are not shown to students. Attachments and exports are protected by server-side authorization.</p><h2>Third-party services</h2><p>The current project may use MongoDB Atlas for database hosting, Google OAuth for optional sign-in, and an SMTP provider for email OTP delivery. The owner must review the selected providers, locations, contracts, and their privacy terms before deployment.</p><h2>Account deletion</h2><p>You may request account deletion from your profile. The account is signed out immediately and remains unavailable while an administrator reviews the request. Once approved, the account is deleted and the same email may be used to create a new account. Complaint records may remain for integrity and review.</p></> : <><h2>Acceptable use</h2><p>Use CampusCare only for genuine college-related concerns. Do not submit unlawful, abusive, knowingly false, malicious, or unsafe content, and do not attempt to access another person’s account, complaint, attachment, or export.</p><h2>Complaint rules</h2><p>Provide accurate details and avoid unnecessary sensitive information. Attachments must be relevant PDF or JPEG files within the stated size limit. The support team may request clarification or update a complaint status.</p><h2>Account responsibilities</h2><p>Keep access codes and account access private. You are responsible for activity performed through your authenticated account. Report suspected unauthorized access promptly.</p><h2>Limitations</h2><p>CampusCare is a project portal, not an emergency service, legal service, or guarantee of a particular institutional outcome. Availability, response times, and retention depend on the institution’s operating decisions.</p></>}</section>;
+  return <section className="panel legal-page"><div className="page-tools"><BackButton /></div><p className="eyebrow">{privacy ? 'PRIVACY' : 'TERMS'}</p><h1>{privacy ? 'Privacy Policy' : 'Terms & Conditions'}</h1><p className="muted">Project policy · Last updated: 25 October 2026</p>{privacy ? <><h2>Information we collect</h2><p>CampusCare may collect your email address, name, student UID, guardian name, course, semester, section, mobile number, complaint details, attachments, replies, status history, and security logs needed to operate the support service.</p><h2>Why we use it</h2><p>We use this information to authenticate students, receive and track complaints, communicate about a complaint, protect the service, and provide authorized administrative reports.</p><h2>Who can access it</h2><p>Your complaint and profile are available to you and authorized CampusCare administrators. Internal notes are not shown to students. Attachments and exports are protected by server-side authorization.</p><h2>Third-party services</h2><p>The current project may use MongoDB Atlas for database hosting and Google OAuth for optional sign-in. The owner must review the selected providers, locations, contracts, and their privacy terms before deployment.</p><h2>Account deletion</h2><p>You may request account deletion from your profile. The account is signed out immediately and remains unavailable while an administrator reviews the request. Once approved, the account is deleted and the same email may be used to create a new account. Complaint records may remain for integrity and review.</p></> : <><h2>Acceptable use</h2><p>Use CampusCare only for genuine college-related concerns. Do not submit unlawful, abusive, knowingly false, malicious, or unsafe content, and do not attempt to access another person’s account, complaint, attachment, or export.</p><h2>Complaint rules</h2><p>Provide accurate details and avoid unnecessary sensitive information. Attachments must be relevant PDF or JPEG files within the stated size limit. The support team may request clarification or update a complaint status.</p><h2>Account responsibilities</h2><p>Keep access codes and account access private. You are responsible for activity performed through your authenticated account. Report suspected unauthorized access promptly.</p><h2>Limitations</h2><p>CampusCare is a project portal, not an emergency service, legal service, or guarantee of a particular institutional outcome. Availability, response times, and retention depend on the institution’s operating decisions.</p></>}</section>;
 }
 
 const allowedTransitions = {
@@ -465,22 +465,10 @@ function NewComplaint() {
   const [form, setForm] = useState({ category: '', subcategory: '', title: '', description: '' });
   const [file, setFile] = useState(null);
   const [error, setError] = useState('');
-  const [challenge, setChallenge] = useState(null);
-  const [code, setCode] = useState('');
-  const [seconds, setSeconds] = useState(0);
-  const [resendSeconds, setResendSeconds] = useState(0);
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => { api('/meta').then(setMeta).catch((err) => setError(err.message)); }, []);
-  useEffect(() => {
-    if (!challenge) return undefined;
-    const timer = window.setInterval(() => {
-      setSeconds(Math.max(0, Math.ceil((new Date(challenge.expiresAt) - Date.now()) / 1000)));
-      setResendSeconds(Math.max(0, Math.ceil((new Date(challenge.resendAvailableAt) - Date.now()) / 1000)));
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [challenge]);
 
   const options = (meta.subcategories && meta.subcategories[form.category]) || [];
   const changeCategory = (category) => setForm({ ...form, category, subcategory: '' });
@@ -501,29 +489,7 @@ function NewComplaint() {
     Object.entries(form).forEach(([key, value]) => data.append(key, value));
     if (file) data.append('attachment', file);
     try {
-      const result = await api('/complaints/verification', { method: 'POST', body: data });
-      setChallenge(result);
-      if (result.devCode) {
-        setCode(result.devCode);
-      } else {
-        setCode('');
-      }
-      setSeconds(Math.ceil((new Date(result.expiresAt) - Date.now()) / 1000));
-      setResendSeconds(Math.ceil((new Date(result.resendAvailableAt) - Date.now()) / 1000));
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const verify = async (event) => {
-    event.preventDefault();
-    if (submitting) return;
-    setError('');
-    setSubmitting(true);
-    try {
-      const result = await api(`/complaints/verification/${challenge.challengeId}/verify`, { method: 'POST', body: JSON.stringify({ code }) });
+      const result = await api('/complaints', { method: 'POST', body: data });
       setSuccess(`Complaint ${result.complaint.ticketId} submitted successfully.`);
       window.setTimeout(() => navigate(`/complaints/${result.complaint._id}`), 900);
     } catch (err) {
@@ -532,24 +498,6 @@ function NewComplaint() {
       setSubmitting(false);
     }
   };
-
-  const resend = async () => {
-    if (resendSeconds > 0 || submitting) return;
-    setError('');
-    setSubmitting(true);
-    try {
-      const result = await api(`/complaints/verification/${challenge.challengeId}/resend`, { method: 'POST' });
-      setChallenge({ ...challenge, expiresAt: result.expiresAt, resendAvailableAt: result.resendAvailableAt });
-      if (result.devCode) setCode(result.devCode);
-      setResendSeconds(Math.ceil((new Date(result.resendAvailableAt) - Date.now()) / 1000));
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const maskedEmail = currentUser.email ? currentUser.email.replace(/^(.{2}).*(@.*)$/, '$1••••$2') : 'your registered email';
 
   return (
     <section data-reveal className="complaint-page">
@@ -578,53 +526,9 @@ function NewComplaint() {
           </div>
         )}
         <div className="form-content">
-          {challenge ? (
-            <>
-              <p className="eyebrow">SECURITY CHECK</p>
-              <h2>Verify your complaint</h2>
-              <p className="muted">
-                We sent a fresh 6-digit code to <strong>{maskedEmail}</strong>. Code expires in {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}.
-              </p>
-              {challenge.devCode && (
-                <p className="success-message" style={{ margin: '8px 0', fontSize: '0.85rem' }}>
-                  Development OTP auto-filled: {challenge.devCode}
-                </p>
-              )}
-              <form onSubmit={verify} className="verification-form">
-                <label>
-                  Verification code
-                  <input
-                    className="otp-input"
-                    type="password"
-                    inputMode="numeric"
-                    pattern="[0-9]{6}"
-                    maxLength="6"
-                    autoComplete="one-time-code"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="6-digit code"
-                    required
-                    autoFocus
-                  />
-                </label>
-                {error && <p className="error">{error}</p>}
-                {success && <p className="success-message">{success}</p>}
-                <button className="primary submit-complaint" disabled={Boolean(success) || seconds === 0 || submitting}>
-                  {submitting ? 'Verifying...' : 'Verify & Submit Complaint'}
-                </button>
-                <div className="verification-actions">
-                  <button type="button" className="button secondary" onClick={() => { setChallenge(null); setCode(''); setError(''); }}>Back to complaint</button>
-                  <button type="button" className="clear-button" onClick={resend} disabled={resendSeconds > 0 || submitting}>
-                    {resendSeconds > 0 ? `Resend in ${resendSeconds}s` : 'Resend OTP'}
-                  </button>
-                </div>
-              </form>
-            </>
-          ) : (
-            <>
               <p className="eyebrow">YOUR CONCERN</p>
               <h2>Tell us what’s happening</h2>
-              <p className="muted">Required fields help us understand your concern.</p>
+              <p className="muted">Required fields help us understand your concern. Your authenticated account protects this submission.</p>
               <p className="privacy-notice">
                 Your complaint is visible to you and authorized administrators. Attach only information needed to explain the issue. <Link to="/privacy">Privacy Policy</Link>
               </p>
@@ -661,11 +565,9 @@ function NewComplaint() {
                 </label>
                 {error && <p className="error">{error}</p>}
                 <button type="submit" className="primary submit-complaint" disabled={submitting}>
-                  {submitting ? 'Please wait...' : 'Verify & Submit Complaint'}
+                  {submitting ? 'Please wait...' : 'Submit Complaint'}
                 </button>
               </form>
-            </>
-          )}
         </div>
       </div>
     </section>

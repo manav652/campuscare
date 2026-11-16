@@ -13,7 +13,7 @@ CampusCare is a full-stack college complaint portal for students and authorized 
 - Hashed email/password authentication and optional Google OAuth sign-in
 - Required first-time student profile setup
 - Student dashboard and separate complaints list
-- Complaint submission with email verification OTP
+- Authenticated complaint submission without email OTP
 - PDF/JPEG attachment validation and 1 MB limit
 - Student complaint history, replies, statuses, and audit timeline
 - Admin complaint console and student account management
@@ -42,7 +42,6 @@ CampusCare is a full-stack college complaint portal for students and authorized 
 - Node.js 20 or newer
 - npm
 - MongoDB Atlas or another MongoDB deployment
-- SMTP credentials for complaint verification email delivery
 - Google OAuth credentials if Google sign-in is enabled
 
 ## Run locally
@@ -86,17 +85,7 @@ Students create an account from the sign-in page with a password of at least eig
 
 The configured administrator uses the same sign-in form. Set `ADMIN_EMAIL` to the administrator email and `ADMIN_PASSWORD_HASH` to its bcrypt hash; the account is provisioned with the admin role after a successful password sign-in. No separate admin sign-in page is exposed.
 
-### Complaint verification email
-
-```env
-SMTP_HOST=smtp.example.com
-SMTP_PORT=587
-SMTP_USER=your-smtp-username
-SMTP_PASS=your-smtp-password
-MAIL_FROM=no-reply@example.com
-```
-
-OTP codes are stored as keyed hashes, expire quickly, are single-use, and are rate-limited. Never commit SMTP credentials.
+Complaint submission requires an authenticated student session and a completed profile; no email verification code is sent.
 
 ### Google OAuth
 
