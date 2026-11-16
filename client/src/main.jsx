@@ -218,8 +218,9 @@ function Login() {
   const location = useLocation();
   const { refresh } = useAuth();
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [sent, setSent] = useState(false);
+  const [name, setName] = useState('');
+  const [password, setPassword] = useState('');
+  const [registering, setRegistering] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [info, setInfo] = useState('');
   const [error, setError] = useState(
@@ -237,40 +238,11 @@ function Login() {
     setError('');
     setInfo('');
     try {
-      if (sent) {
-        const data = await api('/auth/verify-otp', { method: 'POST', body: JSON.stringify({ email, code }) });
-        if (data.token) localStorage.setItem('token', data.token);
-        const user = await refresh();
-        navigate(user.role === 'admin' ? '/admin' : user.profile?.studentUid ? '/dashboard' : '/profile');
-      } else {
-        const data = await api('/auth/request-otp', { method: 'POST', body: JSON.stringify({ email }) });
-        setSent(true);
-        if (data.devCode) {
-          setCode(data.devCode);
-          setInfo(`Development OTP auto-filled: ${data.devCode}`);
-        } else {
-          setInfo(`Sign-in code sent to ${email}`);
-        }
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const resend = async () => {
-    if (submitting) return;
-    setSubmitting(true);
-    setError('');
-    try {
-      const data = await api('/auth/request-otp', { method: 'POST', body: JSON.stringify({ email }) });
-      if (data.devCode) {
-        setCode(data.devCode);
-        setInfo(`Development OTP auto-filled: ${data.devCode}`);
-      } else {
-        setInfo(`A new code was sent to ${email}`);
-      }
+      const endpoint = registering ? '/auth/register' : '/auth/password';
+      const data = await api(endpoint, { method: 'POST', body: JSON.stringify({ email, name, password }) });
+      if (data.token) localStorage.setItem('token', data.token);
+      const user = await refresh();
+      navigate(user.role === 'admin' ? '/admin' : user.profile?.studentUid ? '/dashboard' : '/profile');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -284,31 +256,29 @@ function Login() {
       <h1>Make your concern count.</h1>
       <p className="muted">Track academic and campus issues from one calm, transparent dashboard.</p>
       <form onSubmit={submit}>
+        {registering && <label>
+          Name
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} maxLength="100" required />
+        </label>}
         <label>
           Email address
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={sent} required />
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </label>
-        {sent && (
-          <label>
-            One-time code
-            <input inputMode="numeric" pattern="[0-9]{6}" maxLength="6" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="6-digit code" required autoFocus />
-          </label>
-        )}
+        <label>
+          Password
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength="8" maxLength="128" autoComplete={registering ? 'new-password' : 'current-password'} required />
+        </label>
+        {registering && <p className="muted form-hint">Use at least 8 characters with uppercase, lowercase, and a number.</p>}
         {info && <p className="success-message" style={{ margin: '8px 0', fontSize: '0.85rem' }}>{info}</p>}
         {error && <p className="error">{error}</p>}
         <button className="primary" disabled={submitting}>
-          {submitting ? 'Please wait...' : sent ? 'Verify and continue' : 'Send email OTP'}
+          {submitting ? 'Please wait...' : registering ? 'Create account' : 'Sign in'}
         </button>
-        {sent && (
-          <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
-            <button type="button" className="button secondary" onClick={() => { setSent(false); setCode(''); setError(''); setInfo(''); }} style={{ flex: 1 }}>Change email</button>
-            <button type="button" className="button secondary" onClick={resend} disabled={submitting} style={{ flex: 1 }}>Resend code</button>
-          </div>
-        )}
       </form>
-      {!sent && <a className="google" href={`${API}/auth/google`} onClick={() => { localStorage.removeItem('user'); localStorage.removeItem('token'); }}>Continue with Google</a>}
-      {!sent && <Link className="admin-login" to="/admin-login">Admin sign in</Link>}
-      <p className="privacy-notice">We use your email to sign you in and protect your complaints.</p>
+      <button type="button" className="text-button" onClick={() => { setRegistering(!registering); setError(''); setInfo(''); }}>{registering ? 'Already have an account? Sign in' : 'Create a new account'}</button>
+      <a className="google" href={`${API}/auth/google`} onClick={() => { localStorage.removeItem('user'); localStorage.removeItem('token'); }}>Continue with Google</a>
+      <Link className="admin-login" to="/admin-login">Admin sign in</Link>
+      <p className="privacy-notice">Your password is securely hashed and never stored in plain text.</p>
     </section>
   );
 }

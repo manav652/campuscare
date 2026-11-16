@@ -13,7 +13,7 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const mongoose = require('mongoose');
 const { User, Otp, ComplaintVerification, Complaint, DataRequest, Notification } = require('./models');
-const { auth, hashOtp, signUser, verifyPassword } = require('./security');
+const { auth, hashOtp, signUser, verifyPassword, hashPassword } = require('./security');
 const { allowedTransitions, categories, subcategories, statuses, validateComplaint, validateProfile } = require('./validation');
 
 const app = express();
@@ -82,6 +82,7 @@ const requestOtpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: isDev ? 1
 const verifyOtpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: isDev ? 100 : 15, standardHeaders: true, keyGenerator: otpKey, handler: otpRateLimitHandler });
 const complaintOtpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: isDev ? 100 : 20, standardHeaders: true, keyGenerator: (req) => `${req.ip}:${req.user?.sub || 'anonymous'}` });
 const adminLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: isDev ? 100 : 10, standardHeaders: true });
+const passwordAuthLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: isDev ? 100 : 12, standardHeaders: true });
 const cookieSameSite = process.env.COOKIE_SAMESITE || (process.env.NODE_ENV === 'production' ? 'None' : 'Lax');
 const cookieOptions = `HttpOnly; Path=/; SameSite=${cookieSameSite}; Max-Age=${2 * 60 * 60}${process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === 'true' ? '; Secure' : ''}`;
 const setSessionCookie = (res, token) => res.setHeader('Set-Cookie', `campuscare_session=${encodeURIComponent(token)}; ${cookieOptions}`);
@@ -259,6 +260,44 @@ app.delete('/api/notifications', auth(), async (req, res, next) => {
   try {
     const result = await Notification.deleteMany({ user: req.user.sub });
     res.json({ deleted: result.deletedCount || 0 });
+  } catch (error) { next(error); }
+});
+
+const passwordRequirements = (password) => typeof password === 'string'
+  && password.length >= 8
+  && password.length <= 128
+  && /[a-z]/.test(password)
+  && /[A-Z]/.test(password)
+  && /\d/.test(password);
+
+app.post('/api/auth/register', passwordAuthLimiter, async (req, res, next) => {
+  try {
+    await cleanupDueDeletions();
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    const name = String(req.body.name || '').trim().slice(0, 100);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Valid email is required' });
+    if (!passwordRequirements(password)) return res.status(400).json({ error: 'Password must be 8-128 characters and include uppercase, lowercase, and a number' });
+    const existing = await User.findOne({ email });
+    if (existing) return res.status(409).json({ error: existing.passwordHash ? 'An account with this email already exists' : 'This account was created with Google or OTP. Use that sign-in method or ask an administrator to set a password.' });
+    const user = await User.create({ email, name: name || email.split('@')[0], passwordHash: await hashPassword(password) });
+    const token = signUser(user);
+    setSessionCookie(res, token);
+    res.status(201).json({ token, user: { id: user._id, email: user.email, name: user.name, role: user.role, profile: user.profile, deletion: user.deletion } });
+  } catch (error) { next(error); }
+});
+
+app.post('/api/auth/password', passwordAuthLimiter, async (req, res, next) => {
+  try {
+    await cleanupDueDeletions();
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    const user = await User.findOne({ email });
+    if (!user || !user.passwordHash || !(await verifyPassword(password, user.passwordHash))) return res.status(401).json({ error: 'Invalid email or password' });
+    if (user.deletion?.inProgress) return res.status(403).json({ error: 'Sign-in is unavailable while your deletion request is being reviewed' });
+    const token = signUser(user);
+    setSessionCookie(res, token);
+    res.json({ token, user: { id: user._id, email: user.email, name: user.name, role: user.role, profile: user.profile, deletion: user.deletion } });
   } catch (error) { next(error); }
 });
 

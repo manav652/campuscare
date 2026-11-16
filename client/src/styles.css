@@ -68,6 +68,8 @@ footer { padding: 24px; }
 .site-footer a, .text-link, .contact-links a { color: var(--brand); }
 
 .button, .primary, .secondary, .theme-button, .back-button, .home-button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; border: 1px solid transparent; border-radius: 15px; padding: 10px 16px; font-weight: 650; cursor: pointer; transition: background .18s ease, border-color .18s ease, color .18s ease, transform .18s ease; }
+.text-button { display: block; margin: 14px auto 0; border: 0; background: transparent; color: var(--brand); cursor: pointer; font-weight: 650; }
+.text-button:hover { text-decoration: underline; }
 .button:hover, .primary:hover, .secondary:hover, .theme-button:hover, .back-button:hover { transform: translateY(-1px); }
 .primary { background: var(--brand); color: #fff; }
 .primary:hover { background: var(--brand-dark); }

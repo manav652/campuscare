@@ -28,5 +28,6 @@ const auth = (roles = []) => (req, res, next) => {
 };
 
 const verifyPassword = (password, hash) => bcrypt.compare(password, hash);
+const hashPassword = (password) => bcrypt.hash(password, 12);
 
-module.exports = { auth, hashOtp, signUser, verifyPassword };
+module.exports = { auth, hashOtp, signUser, verifyPassword, hashPassword };

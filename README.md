@@ -1,6 +1,6 @@
 # CampusCare
 
-CampusCare is a full-stack college complaint portal for students and authorized administrators. Students can sign in with email OTP or Google, complete their profile, submit verified complaints, upload limited PDF/JPEG evidence, track status history, and request account deletion. Administrators can review complaints, update statuses, manage student accounts, review deletion requests, and export authorized reports.
+CampusCare is a full-stack college complaint portal for students and authorized administrators. Students can create an account or sign in with email and password, optionally use Google, complete their profile, submit verified complaints, upload limited PDF/JPEG evidence, track status history, and request account deletion. Administrators can review complaints, update statuses, manage student accounts, review deletion requests, and export authorized reports.
 
 ## Preview
 
@@ -10,7 +10,7 @@ CampusCare is a full-stack college complaint portal for students and authorized 
 
 ## Highlights
 
-- Email OTP and optional Google OAuth sign-in
+- Hashed email/password authentication and optional Google OAuth sign-in
 - Required first-time student profile setup
 - Student dashboard and separate complaints list
 - Complaint submission with email verification OTP
@@ -42,7 +42,7 @@ CampusCare is a full-stack college complaint portal for students and authorized 
 - Node.js 20 or newer
 - npm
 - MongoDB Atlas or another MongoDB deployment
-- SMTP credentials for real email OTP delivery
+- SMTP credentials for complaint verification email delivery
 - Google OAuth credentials if Google sign-in is enabled
 
 ## Run locally
@@ -80,7 +80,11 @@ The development Vite server proxies `/api` to port 4000. In development only, em
 
 ## Authentication configuration
 
-### Email OTP
+### Email and password
+
+Students create an account from the sign-in page with a password of at least eight characters containing uppercase, lowercase, and numeric characters. Passwords are hashed with bcrypt and are never stored in plaintext. Existing accounts created only through OTP or Google must continue using that method or be assigned a password by an administrator.
+
+### Complaint verification email
 
 ```env
 SMTP_HOST=smtp.example.com
