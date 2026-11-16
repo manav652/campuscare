@@ -184,12 +184,18 @@ textarea { min-height: 150px; resize: vertical; }
 .status-in-progress { background: #fff0d2; color: #94631b; }
 .empty { padding: 38px 10px; text-align: center; color: var(--muted); }
 .description { margin: 24px 0; padding: 18px; border: 1px solid var(--line); border-radius: 18px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--glass); backdrop-filter: blur(18px); }
-.timeline { margin: 22px 0 32px; padding-left: 24px; border-left: 2px solid var(--line); }
-.timeline-item { position: relative; margin-bottom: 22px; }
-.timeline-item::before { content: ""; position: absolute; top: 5px; left: -31px; width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+.timeline { position: relative; margin: 22px 0 32px; padding: 2px 0 2px 32px; }
+.timeline::before { content: ""; position: absolute; top: 0; bottom: 0; left: 7px; width: 2px; background: color-mix(in srgb, var(--brand) 45%, var(--line)); }
+.timeline-item { position: relative; margin-bottom: 24px; }
+.timeline-item:last-child { margin-bottom: 0; }
+.timeline-item::before { content: ""; position: absolute; top: 4px; left: -32px; width: 14px; height: 14px; border: 3px solid var(--surface); border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand) 45%, var(--line)); }
 .timeline-item small { display: block; color: var(--muted); }
 .message { margin: 12px 0; padding: 12px 16px; border: 1px solid var(--line); border-left: 3px solid var(--brand); border-radius: 15px; background: var(--glass); backdrop-filter: blur(16px); }
 .reply { max-width: 620px; }
+.checkbox { display: flex; align-items: center; gap: 10px; width: fit-content; padding: 11px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--glass); color: var(--text); cursor: pointer; }
+.checkbox input { appearance: none; width: 20px; height: 20px; flex: 0 0 20px; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-muted); cursor: pointer; box-shadow: none; }
+.checkbox input:checked { border-color: var(--brand); background: var(--brand); }
+.checkbox input:checked::after { content: ""; display: block; width: 5px; height: 9px; margin: 3px 0 0 6px; border: solid var(--surface); border-width: 0 2px 2px 0; transform: rotate(45deg); }
 .page-tools { display: flex; gap: 10px; margin-bottom: 24px; }
 .legal-page { line-height: 1.75; }
 .legal-page h2 { margin-top: 30px; color: var(--text); }
