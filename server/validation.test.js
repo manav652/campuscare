@@ -40,3 +40,14 @@ test('profile validation requires exactly ten mobile digits', () => {
   assert.equal(validateProfile({ ...profile, mobileNumber: '9350643912' }), null);
   assert.equal(validateProfile({ ...profile, mobileNumber: '5350643912' }), 'Enter a valid 10-digit Indian mobile number');
 });
+
+test('status transitions map defines valid pathways for all statuses', () => {
+  assert.ok(Array.isArray(allowedTransitions['Submitted']));
+  assert.ok(Array.isArray(allowedTransitions['Under Review']));
+  assert.ok(Array.isArray(allowedTransitions['In Progress']));
+  assert.ok(Array.isArray(allowedTransitions['Waiting for Student']));
+  assert.ok(Array.isArray(allowedTransitions['Resolved']));
+  assert.ok(Array.isArray(allowedTransitions['Closed']));
+  assert.ok(allowedTransitions['Submitted'].includes('Under Review'));
+  assert.ok(!allowedTransitions['Submitted'].includes('Resolved'));
+});

@@ -12,6 +12,11 @@ const userSchema = new mongoose.Schema({
     semester: String,
     section: String,
     mobileNumber: String
+  },
+  deletion: {
+    inProgress: { type: Boolean, default: false },
+    startedAt: Date,
+    scheduledAt: Date
   }
 }, { timestamps: true });
 
@@ -25,6 +30,13 @@ const otpSchema = new mongoose.Schema({
   usedAt: Date
 }, { timestamps: true });
 
+const attachmentSchema = new mongoose.Schema({
+  originalName: String,
+  storedName: String,
+  mimeType: String,
+  size: Number
+}, { _id: false });
+
 const complaintVerificationSchema = new mongoose.Schema({
   student: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   email: { type: String, required: true },
@@ -32,12 +44,7 @@ const complaintVerificationSchema = new mongoose.Schema({
   subcategory: { type: String, required: true },
   title: { type: String, required: true, maxlength: 160 },
   description: { type: String, required: true, maxlength: 5000 },
-  attachment: {
-    originalName: String,
-    storedName: String,
-    mimeType: String,
-    size: Number
-  },
+  attachment: { type: attachmentSchema, default: null, required: false },
   expiresAt: { type: Date, required: true, index: { expires: 0 } },
   lastSentAt: { type: Date, required: true },
   failedAttempts: { type: Number, default: 0 },
@@ -52,12 +59,7 @@ const complaintSchema = new mongoose.Schema({
   subcategory: { type: String, required: true },
   title: { type: String, required: true, trim: true, maxlength: 160 },
   description: { type: String, required: true, trim: true, maxlength: 5000 },
-  attachment: {
-    originalName: String,
-    storedName: String,
-    mimeType: String,
-    size: Number
-  },
+  attachment: { type: attachmentSchema, default: null, required: false },
   status: {
     type: String,
     enum: ['Submitted', 'Under Review', 'In Progress', 'Waiting for Student', 'Resolved', 'Closed'],
@@ -83,7 +85,10 @@ const dataRequestSchema = new mongoose.Schema({
   email: { type: String, required: true, lowercase: true, trim: true, index: true },
   type: { type: String, enum: ['deletion'], default: 'deletion' },
   details: { type: String, trim: true, maxlength: 2000, default: '' },
-  status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending', index: true },
+  status: { type: String, enum: ['in_progress', 'cancelled', 'completed', 'pending', 'approved', 'rejected'], default: 'in_progress', index: true },
+  scheduledDeletionAt: Date,
+  cancelledAt: Date,
+  completedAt: Date,
   reviewNote: { type: String, trim: true, maxlength: 1000 },
   reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   reviewedAt: Date

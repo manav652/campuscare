@@ -22,7 +22,7 @@ const cleanComplaintText = (value) => String(value || '').replaceAll('`', '').tr
 const port = Number(process.env.PORT || 4000);
 const normalizeOrigin = (value) => String(value || '').trim().replace(/\/$/, '');
 const publicUrl = normalizeOrigin(process.env.PUBLIC_URL || process.env.CLIENT_URL || 'http://localhost:5173');
-const uploadDir = path.resolve(process.env.UPLOAD_DIR || 'uploads');
+const uploadDir = path.resolve(process.env.UPLOAD_DIR || (process.env.VERCEL ? '/tmp/uploads' : 'uploads'));
 fs.mkdirSync(uploadDir, { recursive: true });
 const allowedOrigins = new Set([
   publicUrl,
@@ -32,12 +32,35 @@ const allowedOrigins = new Set([
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.has(origin)) return callback(null, true);
-    if (process.env.NODE_ENV !== 'production' && /^https:\/\/([a-z0-9-]+\.)?(loca\.lt|vscode\.dev)$/i.test(origin)) return callback(null, true);
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true);
+    if (/^https:\/\/.*\.vercel\.app$/.test(origin)) return callback(null, true);
+    if (process.env.NODE_ENV !== 'production') return callback(null, true);
     callback(new Error('Origin is not allowed'));
   },
   credentials: true
 }));
 app.use(express.json({ limit: '1mb' }));
+
+let dbConnectionPromise = null;
+async function ensureDbConnected() {
+  if (mongoose.connection.readyState === 1) return;
+  if (!dbConnectionPromise) {
+    dbConnectionPromise = connectDatabase().catch((err) => {
+      dbConnectionPromise = null;
+      throw err;
+    });
+  }
+  return dbConnectionPromise;
+}
+
+app.use(async (_req, _res, next) => {
+  try {
+    await ensureDbConnected();
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -49,15 +72,16 @@ app.use((_req, res, next) => {
 });
 app.use(passport.initialize());
 
+const isDev = process.env.NODE_ENV !== 'production';
 const otpRateLimitHandler = (req, res, _next, options) => {
   const retryAfter = Math.max(1, Math.ceil((req.rateLimit?.resetTime?.getTime?.() - Date.now()) / 1000) || Math.ceil(options.windowMs / 1000));
   res.status(options.statusCode).json({ error: `Too many sign-in attempts. Try again in ${Math.ceil(retryAfter / 60)} minutes.` });
 };
 const otpKey = (req) => `${req.ip}:${String(req.body?.email || '').trim().toLowerCase()}`;
-const requestOtpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: true, keyGenerator: otpKey, handler: otpRateLimitHandler });
-const verifyOtpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 8, standardHeaders: true, keyGenerator: otpKey, handler: otpRateLimitHandler });
-const complaintOtpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true, keyGenerator: (req) => `${req.ip}:${req.user?.sub || 'anonymous'}` });
-const adminLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true });
+const requestOtpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: isDev ? 100 : 8, standardHeaders: true, keyGenerator: otpKey, handler: otpRateLimitHandler });
+const verifyOtpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: isDev ? 100 : 15, standardHeaders: true, keyGenerator: otpKey, handler: otpRateLimitHandler });
+const complaintOtpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: isDev ? 100 : 20, standardHeaders: true, keyGenerator: (req) => `${req.ip}:${req.user?.sub || 'anonymous'}` });
+const adminLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: isDev ? 100 : 10, standardHeaders: true });
 const cookieSameSite = process.env.COOKIE_SAMESITE || (process.env.NODE_ENV === 'production' ? 'None' : 'Lax');
 const cookieOptions = `HttpOnly; Path=/; SameSite=${cookieSameSite}; Max-Age=${2 * 60 * 60}${process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === 'true' ? '; Secure' : ''}`;
 const setSessionCookie = (res, token) => res.setHeader('Set-Cookie', `campuscare_session=${encodeURIComponent(token)}; ${cookieOptions}`);
@@ -83,14 +107,25 @@ function transporter() {
     if (process.env.NODE_ENV === 'production') return null;
     return nodemailer.createTransport({ jsonTransport: true });
   }
+  const cleanPass = String(process.env.SMTP_PASS || '').replace(/\s+/g, '');
+  const isGmail = (process.env.SMTP_HOST || '').includes('gmail') || (process.env.SMTP_USER || '').includes('gmail');
+  if (isGmail) {
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: process.env.SMTP_USER, pass: cleanPass },
+      connectionTimeout: 8000,
+      greetingTimeout: 8000,
+      socketTimeout: 10000
+    });
+  }
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT || 587),
     secure: Number(process.env.SMTP_PORT) === 465,
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000
+    auth: { user: process.env.SMTP_USER, pass: cleanPass },
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 10000
   });
 }
 
@@ -104,7 +139,7 @@ async function sendMailWithTimeout(mailer, message) {
           const error = new Error('Email provider did not respond in time');
           error.code = 'ETIMEDOUT';
           reject(error);
-        }, 18000);
+        }, 10000);
       })
     ]);
   } finally {
@@ -148,28 +183,61 @@ async function cleanupComplaintVerifications() {
   }
 }
 
+async function cleanupDueDeletions() {
+  try {
+    const now = new Date();
+    const dueUsers = await User.find({
+      'deletion.inProgress': true,
+      'deletion.scheduledAt': { $lte: now }
+    }).select('_id email');
+    if (!dueUsers.length) return;
+    const userIds = dueUsers.map((u) => u._id);
+    const emails = dueUsers.map((u) => u.email);
+
+    await Promise.all([
+      Otp.deleteMany({ email: { $in: emails } }),
+      Notification.deleteMany({ user: { $in: userIds } }),
+      ComplaintVerification.deleteMany({ student: { $in: userIds } }),
+      DataRequest.deleteMany({ email: { $in: emails } }),
+      User.deleteMany({ _id: { $in: userIds } })
+    ]);
+    console.info(`[CampusCare] Automatically purged ${userIds.length} account(s) that reached 7-day deletion maturity.`);
+  } catch (err) {
+    console.warn('[CampusCare] Error in cleanupDueDeletions:', err.message);
+  }
+}
+
 async function sendComplaintOtp(email, challengeId) {
   const mailer = transporter();
-  if (!mailer) throw new Error('Email delivery is not configured');
   const code = String(crypto.randomInt(100000, 1000000));
   const otp = await Otp.create({
     email, purpose: 'complaint', challengeId,
     codeHash: hashOtp(`${email}:${challengeId}`, code),
-    expiresAt: new Date(Date.now() + 5 * 60 * 1000)
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000)
   });
-  try {
-    await sendMailWithTimeout(mailer, {
-      from: process.env.MAIL_FROM || process.env.SMTP_USER,
-      to: email,
-      subject: 'Verify your CampusCare complaint',
-      text: `Your CampusCare complaint verification code is ${code}. It expires in 5 minutes.`
-    });
-    if (!process.env.SMTP_HOST) console.info(`[development] Complaint verification code for ${email}: ${code}`);
-  } catch (error) {
+  let mailDelivered = false;
+  if (mailer) {
+    try {
+      await sendMailWithTimeout(mailer, {
+        from: process.env.MAIL_FROM || process.env.SMTP_USER,
+        to: email,
+        subject: 'Verify your CampusCare complaint',
+        text: `Your CampusCare complaint verification code is ${code}. It expires in 10 minutes.`
+      });
+      mailDelivered = true;
+    } catch (error) {
+      console.warn(`[CampusCare] Complaint verification email delivery to ${email} failed: ${error.message}`);
+      if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_DEV_FALLBACK) {
+        await Otp.deleteOne({ _id: otp._id });
+        throw error;
+      }
+    }
+  } else if (process.env.NODE_ENV === 'production') {
     await Otp.deleteOne({ _id: otp._id });
-    throw error;
+    throw new Error('Email delivery is not configured');
   }
-  return { otp };
+  console.info(`[CampusCare OTP] Complaint verification code for ${email}: ${code} (delivered: ${mailDelivered ? 'via SMTP' : 'via console/fallback'})`);
+  return { otp, code, delivered: mailDelivered };
 }
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
@@ -196,46 +264,64 @@ app.delete('/api/notifications', auth(), async (req, res, next) => {
 
 app.post('/api/auth/request-otp', requestOtpLimiter, async (req, res, next) => {
   try {
+    await cleanupDueDeletions();
     const email = String(req.body.email || '').trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Valid email is required' });
-    const deletion = await DataRequest.findOne({ email, type: 'deletion', status: 'pending' }).select('_id');
-    if (deletion) return res.status(423).json({ error: 'Account deletion is under progress. You cannot sign in until an administrator completes the request.' });
     const code = String(crypto.randomInt(100000, 1000000));
     await Otp.deleteMany({ email, purpose: 'login', usedAt: { $exists: false } });
-    const otp = await Otp.create({ email, purpose: 'login', codeHash: hashOtp(email, code), expiresAt: new Date(Date.now() + 5 * 60 * 1000) });
+    const otp = await Otp.create({ email, purpose: 'login', codeHash: hashOtp(email, code), expiresAt: new Date(Date.now() + 10 * 60 * 1000) });
     const mailer = transporter();
-    if (!mailer) {
+    let mailDelivered = false;
+    if (mailer) {
+      try {
+        await sendMailWithTimeout(mailer, {
+          from: process.env.MAIL_FROM || process.env.SMTP_USER,
+          to: email,
+          subject: 'Your complaint portal sign-in code',
+          text: `Your code is ${code}. It expires in 10 minutes.`
+        });
+        mailDelivered = true;
+      } catch (mailError) {
+        console.warn(`[CampusCare] Login OTP email delivery to ${email} failed: ${mailError.message}`);
+        if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_DEV_FALLBACK) {
+          await Otp.deleteOne({ _id: otp._id });
+          const message = mailError.code === 'ETIMEDOUT'
+            ? 'The email provider did not respond. Check SMTP host, port, and network settings.'
+            : 'The email provider rejected the sign-in email. Check SMTP credentials and provider security settings.';
+          return res.status(503).json({ error: message });
+        }
+      }
+    } else if (process.env.NODE_ENV === 'production') {
       await Otp.deleteOne({ _id: otp._id });
       return res.status(503).json({ error: 'Email delivery is not configured' });
     }
-    try {
-      await sendMailWithTimeout(mailer, { from: process.env.MAIL_FROM || process.env.SMTP_USER, to: email, subject: 'Your complaint portal sign-in code', text: `Your code is ${code}. It expires in 10 minutes.` });
-    } catch (mailError) {
-      await Otp.deleteOne({ _id: otp._id });
-      console.error('Login OTP email delivery failed:', mailError.message);
-      return res.status(503).json({ error: 'The email provider rejected the sign-in email. Check SMTP credentials and provider security settings.' });
-    }
-    res.json({ message: 'OTP sent' });
+    console.info(`[CampusCare OTP] Sign-in code for ${email}: ${code} (delivered: ${mailDelivered ? 'via SMTP' : 'via console/fallback'})`);
+    res.json({
+      message: 'OTP sent',
+      devCode: isDev ? code : undefined
+    });
   } catch (error) { next(error); }
 });
 
 app.post('/api/auth/verify-otp', verifyOtpLimiter, async (req, res, next) => {
   try {
+    await cleanupDueDeletions();
     const email = String(req.body.email || '').trim().toLowerCase();
     const code = String(req.body.code || '').trim();
     const otp = await Otp.findOne({ email, purpose: 'login', usedAt: { $exists: false }, expiresAt: { $gt: new Date() }, failedAttempts: { $lt: 5 } }).sort({ createdAt: -1 });
     const submittedHash = hashOtp(email, code);
-    if (!otp || !/^\d{6}$/.test(code) || !crypto.timingSafeEqual(Buffer.from(otp.codeHash), Buffer.from(submittedHash))) {
+    const hashBuf = Buffer.from(otp ? otp.codeHash : '', 'hex');
+    const subBuf = Buffer.from(submittedHash, 'hex');
+    const valid = otp && /^\d{6}$/.test(code) && hashBuf.length === subBuf.length && hashBuf.length > 0 && crypto.timingSafeEqual(hashBuf, subBuf);
+    if (!valid) {
       if (otp) { otp.failedAttempts += 1; await otp.save(); }
       return res.status(401).json({ error: 'Invalid or expired OTP' });
     }
     otp.usedAt = new Date();
     await otp.save();
-    const deletion = await DataRequest.findOne({ email, type: 'deletion', status: 'pending' }).select('_id');
-    if (deletion) return res.status(423).json({ error: 'Account deletion is under progress. You cannot sign in until an administrator completes the request.' });
     const user = await User.findOneAndUpdate({ email }, { $setOnInsert: { email, name: email.split('@')[0] } }, { new: true, upsert: true });
     const token = signUser(user); setSessionCookie(res, token);
-    res.json({ token, user: { id: user._id, email: user.email, name: user.name, role: user.role, profile: user.profile } });
+    res.json({ token, user: { id: user._id, email: user.email, name: user.name, role: user.role, profile: user.profile, deletion: user.deletion } });
   } catch (error) { next(error); }
 });
 
@@ -283,18 +369,19 @@ app.get('/api/auth/google/callback', (req, res, next) => {
       `campuscare_session=${encodeURIComponent(token)}; ${cookieOptions}`,
       `campuscare_oauth_${state}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0`
     ]);
-    return res.redirect(`${publicUrl}/auth/callback`);
+    return res.redirect(`${publicUrl}/auth/callback?token=${encodeURIComponent(token)}`);
   })(req, res, next);
 });
 
 app.get('/api/me', auth(), async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.sub).select('email name role profile createdAt updatedAt') ||
+    await cleanupDueDeletions();
+    const user = await User.findById(req.user.sub).select('email name role profile deletion createdAt updatedAt') ||
       await User.findOneAndUpdate(
         { email: req.user.email },
         { $setOnInsert: { email: req.user.email, name: req.user.email?.split('@')[0] || 'Student' } },
         { new: true, upsert: true }
-      ).select('email name role profile createdAt updatedAt');
+      ).select('email name role profile deletion createdAt updatedAt');
     if (!user) return res.status(401).json({ error: 'Account could not be loaded' });
     res.json({ user });
   } catch (error) { next(error); }
@@ -313,35 +400,143 @@ app.put('/api/profile', auth(['student']), async (req, res, next) => {
 
 app.post('/api/account/deletion', auth(['student']), async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.sub).select('email');
+    const user = await User.findById(req.user.sub);
     if (!user) return res.status(404).json({ error: 'Account not found' });
-    const pending = await DataRequest.findOne({ email: user.email, type: 'deletion', status: 'pending' });
-    if (pending) return res.status(409).json({ error: 'A data request is already under review' });
-    const request = await DataRequest.create({ user: user._id, email: user.email, type: 'deletion', details: 'Student requested account deletion.' });
-    try {
-      const admins = await User.find({ role: 'admin' }).select('_id');
-      if (admins.length) await Notification.insertMany(admins.map((admin) => ({
-        user: admin._id, type: 'account', title: 'Account deletion requested',
-        message: `${user.email} requested account deletion.`, link: '/admin'
-      })));
-    } catch (notificationError) {
-      console.warn('Deletion notification could not be created', notificationError.message);
-    }
-    res.setHeader('Set-Cookie', clearSessionCookie());
-    res.status(201).json({ request: { id: request._id, type: request.type, status: request.status, createdAt: request.createdAt } });
+    const startedAt = new Date();
+    const scheduledAt = new Date(startedAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+    user.deletion = {
+      inProgress: true,
+      startedAt,
+      scheduledAt
+    };
+    await user.save();
+
+    await DataRequest.findOneAndUpdate(
+      { email: user.email, type: 'deletion' },
+      { $set: { user: user._id, email: user.email, type: 'deletion', status: 'in_progress', details: 'Student scheduled deletion with 7-day grace period.' } },
+      { upsert: true, new: true }
+    );
+
+    res.json({
+      ok: true,
+      message: 'Deletion under progress for 7 days. You can cancel at any time.',
+      deletion: {
+        inProgress: true,
+        startedAt,
+        scheduledAt,
+        daysRemaining: 7
+      }
+    });
+  } catch (error) { next(error); }
+});
+
+app.post('/api/account/deletion/cancel', auth(['student']), async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.sub);
+    if (!user) return res.status(404).json({ error: 'Account not found' });
+    user.deletion = {
+      inProgress: false,
+      startedAt: null,
+      scheduledAt: null
+    };
+    await user.save();
+
+    await DataRequest.updateMany(
+      { email: user.email, type: 'deletion', status: { $in: ['pending', 'in_progress'] } },
+      { $set: { status: 'cancelled', reviewNote: 'Cancelled by student' } }
+    );
+
+    res.json({
+      ok: true,
+      message: 'Account deletion stopped. Your account remains active.',
+      deletion: { inProgress: false }
+    });
+  } catch (error) { next(error); }
+});
+
+app.delete('/api/account/deletion', auth(['student']), async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.sub);
+    if (!user) return res.status(404).json({ error: 'Account not found' });
+    user.deletion = {
+      inProgress: false,
+      startedAt: null,
+      scheduledAt: null
+    };
+    await user.save();
+    await DataRequest.updateMany(
+      { email: user.email, type: 'deletion', status: { $in: ['pending', 'in_progress'] } },
+      { $set: { status: 'cancelled', reviewNote: 'Cancelled by student' } }
+    );
+    res.json({
+      ok: true,
+      message: 'Account deletion stopped. Your account remains active.',
+      deletion: { inProgress: false }
+    });
   } catch (error) { next(error); }
 });
 
 app.get('/api/account/deletion', auth(['student']), async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.sub).select('email');
-    const request = user && await DataRequest.findOne({ email: user.email, type: 'deletion' }).sort({ createdAt: -1 }).select('status createdAt reviewedAt reviewNote');
-    res.json({ request });
+    await cleanupDueDeletions();
+    const user = await User.findById(req.user.sub).select('deletion');
+    if (!user || !user.deletion?.inProgress) {
+      return res.json({ deletion: { inProgress: false } });
+    }
+    const now = Date.now();
+    const scheduledTime = new Date(user.deletion.scheduledAt).getTime();
+    const msRemaining = Math.max(0, scheduledTime - now);
+    const daysRemaining = Math.max(1, Math.ceil(msRemaining / (24 * 60 * 60 * 1000)));
+    res.json({
+      deletion: {
+        inProgress: true,
+        startedAt: user.deletion.startedAt,
+        scheduledAt: user.deletion.scheduledAt,
+        daysRemaining
+      }
+    });
   } catch (error) { next(error); }
 });
 
-app.post('/api/complaints', auth(['student']), (_req, res) => {
-  res.status(403).json({ error: 'Complaint email verification is required before submission' });
+app.post('/api/complaints', auth(['student']), upload.single('attachment'), async (req, res, next) => {
+  try {
+    const error = validateComplaint(req.body);
+    if (error) { await removeAttachment({ storedName: req.file?.filename }); return res.status(400).json({ error }); }
+    const user = await User.findById(req.user.sub).select('email profile');
+    if (!user?.email) { await removeAttachment({ storedName: req.file?.filename }); return res.status(401).json({ error: 'Student email is unavailable' }); }
+    if (!user.profile?.studentUid) { await removeAttachment({ storedName: req.file?.filename }); return res.status(403).json({ error: 'Complete your student profile before submitting a complaint' }); }
+    let attachment;
+    try {
+      attachment = await validateAttachment(req.file);
+    } catch (attachmentError) {
+      return res.status(400).json({ error: attachmentError.message });
+    }
+    const ticketId = await createTicketId();
+    const complaint = await Complaint.create({
+      ticketId,
+      student: req.user.sub,
+      category: req.body.category,
+      subcategory: req.body.subcategory,
+      title: cleanComplaintText(req.body.title),
+      description: cleanComplaintText(req.body.description),
+      attachment: (attachment && attachment.storedName) ? attachment : undefined,
+      history: [{ status: 'Submitted', note: 'Complaint submitted', actor: req.user.sub }]
+    });
+    try {
+      await Notification.create({
+        user: req.user.sub, type: 'complaint', title: 'Complaint submitted',
+        message: `Complaint ${ticketId} was submitted successfully.`, link: `/complaints/${complaint._id}`
+      });
+      const admins = await User.find({ role: 'admin' }).select('_id');
+      if (admins.length) await Notification.insertMany(admins.map((admin) => ({
+        user: admin._id, type: 'complaint', title: 'New complaint received',
+        message: `${ticketId} needs review.`, link: `/complaints/${complaint._id}`
+      })));
+    } catch (notificationError) {
+      console.warn('Complaint notifications could not be created', notificationError.message);
+    }
+    res.status(201).json({ complaint });
+  } catch (err) { next(err); }
 });
 
 app.post('/api/complaints/verification', auth(['student']), complaintOtpLimiter, upload.single('attachment'), async (req, res, next) => {
@@ -366,7 +561,8 @@ app.post('/api/complaints/verification', auth(['student']), complaintOtpLimiter,
     const challenge = await ComplaintVerification.create({
       student: req.user.sub, email: user.email, category: req.body.category, subcategory: req.body.subcategory,
       title: cleanComplaintText(req.body.title), description: cleanComplaintText(req.body.description),
-      attachment, expiresAt: new Date(Date.now() + 5 * 60 * 1000), lastSentAt: new Date()
+      attachment: (attachment && attachment.storedName) ? attachment : undefined,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000), lastSentAt: new Date()
     });
     let delivery;
     try {
@@ -376,7 +572,13 @@ app.post('/api/complaints/verification', auth(['student']), complaintOtpLimiter,
       await ComplaintVerification.deleteOne({ _id: challenge._id });
       throw mailError;
     }
-    res.status(201).json({ challengeId: challenge._id, email: user.email, expiresAt: challenge.expiresAt, resendAvailableAt: new Date(Date.now() + 60 * 1000) });
+    res.status(201).json({
+      challengeId: challenge._id,
+      email: user.email,
+      expiresAt: challenge.expiresAt,
+      resendAvailableAt: new Date(Date.now() + 60 * 1000),
+      devCode: isDev ? delivery.code : undefined
+    });
   } catch (error) { next(error); }
 });
 
@@ -390,7 +592,12 @@ app.post('/api/complaints/verification/:id/resend', auth(['student']), complaint
     challenge.lastSentAt = new Date();
     challenge.failedAttempts = 0;
     await challenge.save();
-    res.json({ message: 'OTP sent', expiresAt: challenge.expiresAt, resendAvailableAt: new Date(Date.now() + 60 * 1000) });
+    res.json({
+      message: 'OTP sent',
+      expiresAt: challenge.expiresAt,
+      resendAvailableAt: new Date(Date.now() + 60 * 1000),
+      devCode: isDev ? delivery.code : undefined
+    });
   } catch (error) { next(error); }
 });
 
@@ -400,29 +607,42 @@ app.post('/api/complaints/verification/:id/verify', auth(['student']), complaint
     const code = String(req.body.code || '').trim();
     if (!/^\d{6}$/.test(code)) return res.status(400).json({ error: 'Enter the six-digit verification code' });
     challenge = await ComplaintVerification.findOneAndUpdate(
-      { _id: req.params.id, student: req.user.sub, usedAt: { $exists: false }, processingAt: { $exists: false }, expiresAt: { $gt: new Date() }, failedAttempts: { $lt: 5 } },
-      { $set: { processingAt: new Date() } }, { new: true }
+      {
+        _id: req.params.id,
+        student: req.user.sub,
+        usedAt: { $exists: false },
+        $or: [
+          { processingAt: { $exists: false } },
+          { processingAt: null },
+          { processingAt: { $lt: new Date(Date.now() - 15000) } }
+        ],
+        expiresAt: { $gt: new Date() },
+        failedAttempts: { $lt: 5 }
+      },
+      { $set: { processingAt: new Date() } },
+      { new: true }
     );
     if (!challenge) return res.status(400).json({ error: 'Verification is invalid, expired, or already used' });
     const otp = await Otp.findOne({ email: challenge.email, purpose: 'complaint', challengeId: challenge._id, usedAt: { $exists: false }, expiresAt: { $gt: new Date() }, failedAttempts: { $lt: 5 } }).sort({ createdAt: -1 });
     const submittedHash = hashOtp(`${challenge.email}:${challenge._id}`, code);
-    if (!otp || !crypto.timingSafeEqual(Buffer.from(otp.codeHash), Buffer.from(submittedHash))) {
-      challenge.processingAt = undefined;
-      challenge.failedAttempts += 1;
-      await challenge.save();
+    const hashBuf = Buffer.from(otp ? otp.codeHash : '', 'hex');
+    const subBuf = Buffer.from(submittedHash, 'hex');
+    const valid = otp && /^\d{6}$/.test(code) && hashBuf.length === subBuf.length && hashBuf.length > 0 && crypto.timingSafeEqual(hashBuf, subBuf);
+    if (!valid) {
+      await ComplaintVerification.updateOne({ _id: challenge._id }, { $unset: { processingAt: 1 }, $inc: { failedAttempts: 1 } });
       if (otp) { otp.failedAttempts += 1; await otp.save(); }
       return res.status(401).json({ error: 'Invalid or expired verification code' });
     }
     const ticketId = await createTicketId();
     const complaint = await Complaint.create({
       ticketId, student: req.user.sub, category: challenge.category, subcategory: challenge.subcategory,
-      title: challenge.title, description: challenge.description, attachment: challenge.attachment,
+      title: challenge.title, description: challenge.description,
+      attachment: (challenge.attachment && challenge.attachment.storedName) ? challenge.attachment : undefined,
       history: [{ status: 'Submitted', note: 'Complaint submitted', actor: req.user.sub }]
     });
     otp.usedAt = new Date();
     await otp.save();
     challenge.usedAt = new Date();
-    challenge.processingAt = undefined;
     await challenge.save();
     await ComplaintVerification.deleteOne({ _id: challenge._id });
     try {
@@ -441,8 +661,7 @@ app.post('/api/complaints/verification/:id/verify', auth(['student']), complaint
     res.status(201).json({ complaint });
   } catch (error) {
     if (challenge && !challenge.usedAt) {
-      challenge.processingAt = undefined;
-      await challenge.save().catch(() => {});
+      await ComplaintVerification.updateOne({ _id: challenge._id }, { $unset: { processingAt: 1 } }).catch(() => {});
     }
     console.error('Complaint verification failed', error);
     if (error.name === 'ValidationError') {
@@ -475,8 +694,11 @@ app.get('/api/complaints', auth(), async (req, res, next) => {
 
 app.get('/api/complaints/:id', auth(), async (req, res, next) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Complaint not found' });
     const complaint = await Complaint.findById(req.params.id).populate('student', 'email name profile').populate('messages.author', 'email name');
-    if (!complaint || (req.user.role !== 'admin' && complaint.student._id.toString() !== req.user.sub)) return res.status(404).json({ error: 'Complaint not found' });
+    if (!complaint) return res.status(404).json({ error: 'Complaint not found' });
+    const studentId = complaint.student?._id ? complaint.student._id.toString() : (complaint.student ? complaint.student.toString() : null);
+    if (req.user.role !== 'admin' && studentId !== req.user.sub) return res.status(404).json({ error: 'Complaint not found' });
     if (req.user.role !== 'admin') complaint.messages = complaint.messages.filter((message) => !message.internal);
     res.json({ complaint });
   } catch (error) { next(error); }
@@ -484,8 +706,11 @@ app.get('/api/complaints/:id', auth(), async (req, res, next) => {
 
 app.post('/api/complaints/:id/messages', auth(), async (req, res, next) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Complaint not found' });
     const complaint = await Complaint.findById(req.params.id);
-    if (!complaint || (req.user.role !== 'admin' && complaint.student.toString() !== req.user.sub)) return res.status(404).json({ error: 'Complaint not found' });
+    if (!complaint) return res.status(404).json({ error: 'Complaint not found' });
+    const studentId = complaint.student ? complaint.student.toString() : null;
+    if (req.user.role !== 'admin' && studentId !== req.user.sub) return res.status(404).json({ error: 'Complaint not found' });
     if (!String(req.body.body || '').trim()) return res.status(400).json({ error: 'Message is required' });
     complaint.messages.push({ author: req.user.sub, body: cleanComplaintText(req.body.body), internal: req.user.role === 'admin' && Boolean(req.body.internal) });
     await complaint.save();
@@ -495,24 +720,29 @@ app.post('/api/complaints/:id/messages', auth(), async (req, res, next) => {
 
 app.patch('/api/complaints/:id/status', auth(['admin']), async (req, res, next) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Complaint not found' });
     const complaint = await Complaint.findById(req.params.id);
     if (!complaint) return res.status(404).json({ error: 'Complaint not found' });
-    if (!statuses.includes(req.body.status) || !allowedTransitions[complaint.status].includes(req.body.status)) return res.status(400).json({ error: `Invalid transition from ${complaint.status}` });
+    if (!statuses.includes(req.body.status) || !allowedTransitions[complaint.status]?.includes(req.body.status)) return res.status(400).json({ error: `Invalid transition from ${complaint.status}` });
     complaint.status = req.body.status;
     complaint.history.push({ status: req.body.status, note: String(req.body.note || ''), actor: req.user.sub });
     await complaint.save();
-    await Notification.create({
-      user: complaint.student, type: 'complaint', title: 'Complaint status updated',
-      message: `${complaint.ticketId} is now ${complaint.status}.`, link: `/complaints/${complaint._id}`
-    });
+    if (complaint.student) {
+      await Notification.create({
+        user: complaint.student, type: 'complaint', title: 'Complaint status updated',
+        message: `${complaint.ticketId} is now ${complaint.status}.`, link: `/complaints/${complaint._id}`
+      });
+    }
     res.json({ complaint });
   } catch (error) { next(error); }
 });
 
 app.get('/api/complaints/:id/attachment', auth(), async (req, res, next) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Attachment not found' });
     const complaint = await Complaint.findById(req.params.id);
-    if (!complaint || !complaint.attachment?.storedName || (req.user.role !== 'admin' && complaint.student.toString() !== req.user.sub)) return res.status(404).json({ error: 'Attachment not found' });
+    const studentId = complaint?.student ? complaint.student.toString() : null;
+    if (!complaint || !complaint.attachment?.storedName || (req.user.role !== 'admin' && studentId !== req.user.sub)) return res.status(404).json({ error: 'Attachment not found' });
     res.download(path.join(uploadDir, complaint.attachment.storedName), complaint.attachment.originalName);
   } catch (error) { next(error); }
 });
@@ -536,6 +766,7 @@ app.get('/api/admin/users', auth(['admin']), async (_req, res, next) => {
 });
 app.get('/api/admin/users/:id', auth(['admin']), async (req, res, next) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Student profile not found' });
     const user = await User.findOne({ _id: req.params.id, role: 'student' }).select('email name profile createdAt updatedAt');
     if (!user) return res.status(404).json({ error: 'Student profile not found' });
     const complaints = await Complaint.find({ student: user._id }).select('ticketId title category status createdAt').sort({ createdAt: -1 });
@@ -595,15 +826,18 @@ app.get('/api/admin/export.xlsx', auth(['admin']), async (_req, res, next) => {
 
 app.get('/api/complaints/:id/export.pdf', auth(), async (req, res, next) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Complaint not found' });
     const complaint = await Complaint.findById(req.params.id).populate('student', 'email name profile');
-    if (!complaint || (req.user.role !== 'admin' && complaint.student._id.toString() !== req.user.sub)) return res.status(404).json({ error: 'Complaint not found' });
+    if (!complaint) return res.status(404).json({ error: 'Complaint not found' });
+    const studentId = complaint.student?._id ? complaint.student._id.toString() : (complaint.student ? complaint.student.toString() : null);
+    if (req.user.role !== 'admin' && studentId !== req.user.sub) return res.status(404).json({ error: 'Complaint not found' });
     const document = new PDFDocument({ margin: 50 });
     res.type('application/pdf').attachment(`${complaint.ticketId}.pdf`);
     document.pipe(res);
     document.fontSize(20).text('CampusCare Complaint Report');
     document.moveDown().fontSize(11).text(`Ticket: ${complaint.ticketId}`);
     document.text(`Status: ${complaint.status}`);
-    document.text(`Student: ${complaint.student.name || complaint.student.email}`);
+    document.text(`Student: ${complaint.student?.name || complaint.student?.email || 'Student Account (Deleted)'}`);
     document.text(`Category: ${complaint.category} / ${complaint.subcategory}`);
     document.moveDown().fontSize(14).text(complaint.title);
     document.moveDown().fontSize(11).text(complaint.description);
@@ -621,8 +855,33 @@ app.use((error, _req, res, _next) => {
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'API route not found' }));
 
+async function connectDatabase() {
+  const primaryUri = process.env.MONGODB_URI;
+  const localUri = 'mongodb://127.0.0.1:27017/college_complaints';
+  try {
+    console.log('Connecting to database...');
+    await mongoose.connect(primaryUri, { serverSelectionTimeoutMS: 4000 });
+    console.log(`Connected to database successfully (${primaryUri?.includes('@') ? 'remote cluster' : primaryUri})`);
+  } catch (primaryErr) {
+    console.warn(`Primary database connection failed: ${primaryErr.message}`);
+    if (primaryUri !== localUri) {
+      console.log(`Attempting fallback connection to local MongoDB (${localUri})...`);
+      try {
+        await mongoose.connect(localUri, { serverSelectionTimeoutMS: 3000 });
+        console.log('Connected to local MongoDB database fallback successfully!');
+        return;
+      } catch (localErr) {
+        console.error(`Local MongoDB fallback connection also failed: ${localErr.message}`);
+      }
+    }
+    throw primaryErr;
+  }
+}
+
 if (require.main === module) {
-  mongoose.connect(process.env.MONGODB_URI).then(() => app.listen(port, () => console.log(`API listening on ${port}`))).catch((error) => { console.error('MongoDB connection failed', error.message); process.exitCode = 1; });
+  connectDatabase()
+    .then(() => app.listen(port, () => console.log(`API listening on ${port}`)))
+    .catch((error) => { console.error('MongoDB connection failed', error.message); process.exitCode = 1; });
 }
 
 module.exports = { app };
