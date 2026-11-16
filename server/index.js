@@ -305,7 +305,6 @@ app.post('/api/auth/password', passwordAuthLimiter, async (req, res, next) => {
       user = await User.findOne({ email });
       if (!user || !user.passwordHash || !(await verifyPassword(password, user.passwordHash))) return res.status(401).json({ error: 'Invalid email or password' });
     }
-    if (user.deletion?.inProgress) return res.status(403).json({ error: 'Sign-in is unavailable while your deletion request is being reviewed' });
     const token = signUser(user);
     setSessionCookie(res, token);
     res.json({ token, user: { id: user._id, email: user.email, name: user.name, role: user.role, profile: user.profile, deletion: user.deletion } });
@@ -473,7 +472,7 @@ app.post('/api/account/deletion', auth(['student']), async (req, res, next) => {
 
     res.json({
       ok: true,
-      message: 'Deletion under progress for 7 days. You can cancel at any time.',
+      message: 'Account deletion is scheduled in 7 days. You can cancel at any time before then.',
       deletion: {
         inProgress: true,
         startedAt,
@@ -826,21 +825,6 @@ app.get('/api/admin/users/:id', auth(['admin']), async (req, res, next) => {
     const complaints = await Complaint.find({ student: user._id }).select('ticketId title category status createdAt').sort({ createdAt: -1 });
     const deletion = await DataRequest.findOne({ user: user._id, type: 'deletion' }).sort({ createdAt: -1 }).select('status createdAt reviewedAt reviewNote');
     res.json({ user, complaints, deletion });
-  } catch (error) { next(error); }
-});
-
-app.patch('/api/admin/data-requests/:id', auth(['admin']), async (req, res, next) => {
-  try {
-    const status = String(req.body.status || '');
-    if (!['approved', 'rejected'].includes(status)) return res.status(400).json({ error: 'Invalid review status' });
-    const request = await DataRequest.findById(req.params.id);
-    if (!request || request.status !== 'pending') return res.status(404).json({ error: 'Data request not found' });
-    request.status = status; request.reviewNote = cleanComplaintText(req.body.reviewNote); request.reviewedBy = req.user.sub; request.reviewedAt = new Date();
-    await request.save();
-    if (status === 'approved' && request.type === 'deletion') {
-      await User.findByIdAndDelete(request.user);
-    }
-    res.json({ request: { id: request._id, type: request.type, status: request.status, reviewNote: request.reviewNote } });
   } catch (error) { next(error); }
 });
 

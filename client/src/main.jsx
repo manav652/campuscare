@@ -156,8 +156,8 @@ function Layout({ children }) {
     <div className="workspace">
       <header className="workspace-header"><button className="mobile-menu-toggle" type="button" aria-label="Open navigation" onClick={() => setSidebarOpen(true)}><MenuIcon /></button><div className="breadcrumbs"><Link to={user.role === 'admin' ? '/admin' : '/dashboard'}><LogoMark />CampusCare</Link><b>/</b><strong>{pageTitle}</strong></div><div className="header-actions"><Notifications /><ThemeButton theme={theme} toggle={toggle} /><Link className="account" to={user.role === 'admin' ? '/admin' : '/profile'} aria-label="Open your profile"><span className="avatar">{(user.name || user.email || 'S').charAt(0).toUpperCase()}</span><span className="account-copy"><strong>{user.name || 'Student'}</strong><small>{user.role === 'admin' ? 'Administrator' : 'Student account'}</small></span></Link></div></header>
       {isDeletionInProgress && (
-        <div className="deletion-banner">
-          <span>⚠️ <strong>Deletion under progress:</strong> Your account is scheduled for permanent deletion in <b>{deletionDaysRemaining} day{deletionDaysRemaining !== 1 ? 's' : ''}</b>.</span>
+       <div className="deletion-banner">
+         <span><strong>Account deletion scheduled:</strong> Your account will be permanently deleted in <b>{deletionDaysRemaining} day{deletionDaysRemaining !== 1 ? 's' : ''}</b>.</span>
           <button type="button" className="stop-deletion-btn" onClick={stopDeletion}>Stop deletion & keep my account</button>
         </div>
       )}
@@ -200,7 +200,7 @@ function NotFound() {
 
 function LegalPage({ type }) {
   const privacy = type === 'privacy';
-  return <section className="panel legal-page"><div className="page-tools"><BackButton /></div><p className="eyebrow">{privacy ? 'PRIVACY' : 'TERMS'}</p><h1>{privacy ? 'Privacy Policy' : 'Terms & Conditions'}</h1><p className="muted">Project policy · Last updated: 25 October 2026</p>{privacy ? <><h2>Information we collect</h2><p>CampusCare may collect your email address, name, student UID, guardian name, course, semester, section, mobile number, complaint details, attachments, replies, status history, and security logs needed to operate the support service.</p><h2>Why we use it</h2><p>We use this information to authenticate students, receive and track complaints, communicate about a complaint, protect the service, and provide authorized administrative reports.</p><h2>Who can access it</h2><p>Your complaint and profile are available to you and authorized CampusCare administrators. Internal notes are not shown to students. Attachments and exports are protected by server-side authorization.</p><h2>Third-party services</h2><p>The current project may use MongoDB Atlas for database hosting and Google OAuth for optional sign-in. The owner must review the selected providers, locations, contracts, and their privacy terms before deployment.</p><h2>Account deletion</h2><p>You may request account deletion from your profile. The account is signed out immediately and remains unavailable while an administrator reviews the request. Once approved, the account is deleted and the same email may be used to create a new account. Complaint records may remain for integrity and review.</p></> : <><h2>Acceptable use</h2><p>Use CampusCare only for genuine college-related concerns. Do not submit unlawful, abusive, knowingly false, malicious, or unsafe content, and do not attempt to access another person’s account, complaint, attachment, or export.</p><h2>Complaint rules</h2><p>Provide accurate details and avoid unnecessary sensitive information. Attachments must be relevant PDF or JPEG files within the stated size limit. The support team may request clarification or update a complaint status.</p><h2>Account responsibilities</h2><p>Keep access codes and account access private. You are responsible for activity performed through your authenticated account. Report suspected unauthorized access promptly.</p><h2>Limitations</h2><p>CampusCare is a project portal, not an emergency service, legal service, or guarantee of a particular institutional outcome. Availability, response times, and retention depend on the institution’s operating decisions.</p></>}</section>;
+  return <section className="panel legal-page"><div className="page-tools"><BackButton /></div><p className="eyebrow">{privacy ? 'PRIVACY' : 'TERMS'}</p><h1>{privacy ? 'Privacy Policy' : 'Terms & Conditions'}</h1><p className="muted">Project policy · Last updated: 25 October 2026</p>{privacy ? <><h2>Information we collect</h2><p>CampusCare may collect your email address, name, student UID, guardian name, course, semester, section, mobile number, complaint details, attachments, replies, status history, and security logs needed to operate the support service.</p><h2>Why we use it</h2><p>We use this information to authenticate students, receive and track complaints, communicate about a complaint, protect the service, and provide authorized administrative reports.</p><h2>Who can access it</h2><p>Your complaint and profile are available to you and authorized CampusCare administrators. Internal notes are not shown to students. Attachments and exports are protected by server-side authorization.</p><h2>Third-party services</h2><p>The current project may use MongoDB Atlas for database hosting and Google OAuth for optional sign-in. The owner must review the selected providers, locations, contracts, and their privacy terms before deployment.</p><h2>Account deletion</h2><p>You may schedule account deletion from your profile. Deletion starts immediately and completes automatically after a 7-day grace period. You can sign in and cancel deletion at any time before the period ends. Complaint records may remain for integrity and review.</p></> : <><h2>Acceptable use</h2><p>Use CampusCare only for genuine college-related concerns. Do not submit unlawful, abusive, knowingly false, malicious, or unsafe content, and do not attempt to access another person’s account, complaint, attachment, or export.</p><h2>Complaint rules</h2><p>Provide accurate details and avoid unnecessary sensitive information. Attachments must be relevant PDF or JPEG files within the stated size limit. The support team may request clarification or update a complaint status.</p><h2>Account responsibilities</h2><p>Keep access codes and account access private. You are responsible for activity performed through your authenticated account. Report suspected unauthorized access promptly.</p><h2>Limitations</h2><p>CampusCare is a project portal, not an emergency service, legal service, or guarantee of a particular institutional outcome. Availability, response times, and retention depend on the institution’s operating decisions.</p></>}</section>;
 }
 
 const allowedTransitions = {
@@ -226,7 +226,7 @@ function Login() {
     new URLSearchParams(location.search).get('error') === 'google'
       ? 'Google sign-in could not be completed. Please try again.'
       : new URLSearchParams(location.search).get('deleted') === 'pending'
-      ? 'Deletion request submitted. Sign-in is unavailable while an administrator reviews it.'
+      ? 'Account deletion is scheduled. You can sign in and cancel it within 7 days.'
       : ''
   );
 
@@ -336,7 +336,7 @@ function Profile() {
     try {
       const res = await api('/account/deletion', { method: 'POST' });
       setDeletionStatus(res.deletion || { inProgress: true, daysRemaining: 7 });
-      setDeletionMsg('Account deletion is now under progress for 7 days. You can cancel anytime.');
+      setDeletionMsg('Account deletion is scheduled for 7 days. You can cancel anytime before then.');
       await refresh();
     } catch (err) {
       setDeletionError(err.message);
@@ -399,9 +399,9 @@ function Profile() {
             <p className="eyebrow">ACCOUNT CONTROL</p>
             {isDeleting ? (
               <>
-                <h2>Deletion under progress (7-day period)</h2>
-                <p className="muted">Your account deletion is currently in progress. Permanent deletion will take place automatically in <strong>{daysLeft} day{daysLeft !== 1 ? 's' : ''}</strong>.</p>
-                <p className="muted">You can stop the deletion at any time during these 7 days to keep your account and all complaint records intact.</p>
+                <h2>Account deletion is scheduled</h2>
+                <p className="muted">Your account will be permanently deleted automatically in <strong>{daysLeft} day{daysLeft !== 1 ? 's' : ''}</strong>.</p>
+                <p className="muted">You can sign in and cancel deletion at any time during the 7-day grace period.</p>
                 {deletionMsg && <p className="success-message">{deletionMsg}</p>}
                 {deletionError && <p className="error">{deletionError}</p>}
                 <button type="button" className="button primary" onClick={stopDeletion} disabled={deleting}>
@@ -411,11 +411,11 @@ function Profile() {
             ) : (
               <>
                 <h2>Delete your account</h2>
-                <p className="muted">No admin approval required. Once started, your account enters a <strong>7-day grace period</strong> with deletion under progress. You can stop deletion at any time during these 7 days. If not stopped, your account will be permanently deleted after 7 days.</p>
+                <p className="muted">No approval is required. Clicking delete starts a <strong>7-day grace period</strong>. If you do not cancel it during that period, your account will be permanently deleted automatically.</p>
                 {deletionMsg && <p className="success-message">{deletionMsg}</p>}
                 {deletionError && <p className="error">{deletionError}</p>}
                 <button type="button" className="button danger-button" onClick={() => setConfirmDeletion(true)} disabled={deleting}>
-                  {deleting ? 'Scheduling...' : 'Start 7-day account deletion'}
+                  {deleting ? 'Scheduling...' : 'Delete account'}
                 </button>
               </>
             )}
@@ -423,9 +423,9 @@ function Profile() {
         )}
       </section>
       <ConfirmDialog
-        title="Start 7-day account deletion?"
-        message="Your account will enter a 7-day grace period with deletion under progress. You can log in and stop deletion at any time during those 7 days."
-        confirmLabel="Yes, start deletion period"
+        title="Delete your account?"
+        message="Your account will be scheduled for automatic deletion after 7 days. You can sign in and cancel deletion at any time during that period."
+        confirmLabel="Yes, delete my account"
         open={confirmDeletion}
         onConfirm={startDeletion}
         onCancel={() => setConfirmDeletion(false)}
@@ -699,11 +699,10 @@ function Detail() {
 }
 
 function Admin() {
-  const [items, setItems] = useState([]); const [counts, setCounts] = useState({}); const [requests, setRequests] = useState([]); const [error, setError] = useState('');
-  useEffect(() => { Promise.all([api('/complaints'), api('/admin/summary'), api('/admin/data-requests')]).then(([a, b, c]) => { setItems(a.complaints); setCounts(b.counts); setRequests(c.requests); }).catch((err) => setError(err.message)); }, []);
+  const [items, setItems] = useState([]); const [counts, setCounts] = useState({}); const [error, setError] = useState('');
+  useEffect(() => { Promise.all([api('/complaints'), api('/admin/summary')]).then(([a, b]) => { setItems(a.complaints); setCounts(b.counts); }).catch((err) => setError(err.message)); }, []);
   const exportFile = async (type) => { try { const response = await fetch(`${API}/admin/export.${type}`, { credentials: 'include' }); if (!response.ok) throw new Error('Export failed'); const blob = await response.blob(); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `complaints.${type}`; link.click(); URL.revokeObjectURL(link.href); } catch (err) { setError(err.message); } };
-  const reviewRequest = async (id, status) => { try { await api(`/admin/data-requests/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }); setRequests(requests.map((request) => request._id === id ? { ...request, status } : request)); } catch (err) { setError(err.message); } };
-  return <><section className="hero"><div><p className="eyebrow">ADMIN CONSOLE</p><h1>Keep every case moving.</h1><p className="muted">Review complaints, respond visibly, and maintain a clear audit trail.</p></div><div className="export-actions"><button className="button primary" onClick={() => exportFile('csv')}>Export CSV</button><button className="button secondary" onClick={() => exportFile('xlsx')}>Export Excel</button></div></section><div className="stats">{Object.entries(counts).map(([key, value]) => <div className="stat" key={key}><small>{key}</small><strong>{value}</strong></div>)}</div><section className="panel admin-complaints"><h2>Complaints</h2>{error && <p className="error">{error}</p>}{items.map((item) => <Link className="complaint-row" to={`/complaints/${item._id}`} key={item._id}><div><strong>{titleCase(item.title)}</strong><small>{item.ticketId} · {item.student?.name || item.student?.email || 'Deleted account'}</small></div><span className={`status status-${item.status.toLowerCase().replaceAll(' ', '-')}`}>{item.status}</span></Link>)}</section>{requests.length > 0 && <section className="panel admin-requests"><div className="panel-head"><div><p className="eyebrow">ACCOUNT DELETIONS</p><h2>Deletion requests</h2></div></div>{requests.map((request) => <div className="request-row" key={request._id}><div><strong>{request.email}</strong><small>Requested {new Date(request.createdAt).toLocaleString()}</small></div><span className="status">{titleCase(request.status)}</span>{request.status === 'pending' && <div className="detail-actions"><button className="button secondary" onClick={() => reviewRequest(request._id, 'rejected')}>Reject</button><button className="button primary" onClick={() => reviewRequest(request._id, 'approved')}>Approve</button></div>}</div>)}</section>}</>;
+  return <><section className="hero"><div><p className="eyebrow">ADMIN CONSOLE</p><h1>Keep every case moving.</h1><p className="muted">Review complaints, respond visibly, and maintain a clear audit trail.</p></div><div className="export-actions"><button className="button primary" onClick={() => exportFile('csv')}>Export CSV</button><button className="button secondary" onClick={() => exportFile('xlsx')}>Export Excel</button></div></section><div className="stats">{Object.entries(counts).map(([key, value]) => <div className="stat" key={key}><small>{key}</small><strong>{value}</strong></div>)}</div><section className="panel admin-complaints"><h2>Complaints</h2>{error && <p className="error">{error}</p>}{items.map((item) => <Link className="complaint-row" to={`/complaints/${item._id}`} key={item._id}><div><strong>{titleCase(item.title)}</strong><small>{item.ticketId} · {item.student?.name || item.student?.email || 'Deleted account'}</small></div><span className={`status status-${item.status.toLowerCase().replaceAll(' ', '-')}`}>{item.status}</span></Link>)}</section></>;
 }
 
 function AdminUsers() {
