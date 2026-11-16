@@ -84,6 +84,8 @@ The development Vite server proxies `/api` to port 4000. In development only, em
 
 Students create an account from the sign-in page with a password of at least eight characters containing uppercase, lowercase, and numeric characters. Passwords are hashed with bcrypt and are never stored in plaintext. Existing accounts created only through OTP or Google must continue using that method or be assigned a password by an administrator.
 
+The configured administrator uses the same sign-in form. Set `ADMIN_EMAIL` to the administrator email and `ADMIN_PASSWORD_HASH` to its bcrypt hash; the account is provisioned with the admin role after a successful password sign-in. No separate admin sign-in page is exposed.
+
 ### Complaint verification email
 
 ```env

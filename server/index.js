@@ -292,8 +292,19 @@ app.post('/api/auth/password', passwordAuthLimiter, async (req, res, next) => {
     await cleanupDueDeletions();
     const email = String(req.body.email || '').trim().toLowerCase();
     const password = String(req.body.password || '');
-    const user = await User.findOne({ email });
-    if (!user || !user.passwordHash || !(await verifyPassword(password, user.passwordHash))) return res.status(401).json({ error: 'Invalid email or password' });
+    const isConfiguredAdmin = Boolean(process.env.ADMIN_EMAIL && email === process.env.ADMIN_EMAIL.trim().toLowerCase());
+    let user;
+    if (isConfiguredAdmin) {
+      if (!process.env.ADMIN_PASSWORD_HASH || !(await verifyPassword(password, process.env.ADMIN_PASSWORD_HASH))) return res.status(401).json({ error: 'Invalid email or password' });
+      user = await User.findOneAndUpdate(
+        { email },
+        { $set: { email, role: 'admin', name: 'Administrator' } },
+        { upsert: true, new: true }
+      );
+    } else {
+      user = await User.findOne({ email });
+      if (!user || !user.passwordHash || !(await verifyPassword(password, user.passwordHash))) return res.status(401).json({ error: 'Invalid email or password' });
+    }
     if (user.deletion?.inProgress) return res.status(403).json({ error: 'Sign-in is unavailable while your deletion request is being reviewed' });
     const token = signUser(user);
     setSessionCookie(res, token);

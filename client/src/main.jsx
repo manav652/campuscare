@@ -43,7 +43,7 @@ function CopyTicketButton({ ticketId }) {
 
 const AuthContext = createContext({ user: null, loading: true, refresh: async () => null, clear: () => {} });
 const ThemeContext = createContext({ theme: 'light', toggle: () => {} });
-const publicPaths = ['/login', '/admin-login', '/auth/callback', '/privacy', '/terms'];
+const publicPaths = ['/login', '/auth/callback', '/privacy', '/terms'];
 function AuthProvider({ children }) {
   const location = useLocation();
   const [user, setUser] = useState(() => getUser(null));
@@ -177,7 +177,6 @@ function pageTitleFor(pathname) {
   if (pathname === '/privacy') return 'Privacy policy';
   if (pathname === '/terms') return 'Terms and conditions';
   if (pathname === '/login') return 'Sign in';
-  if (pathname === '/admin-login') return 'Admin sign in';
   if (pathname === '/auth/callback') return 'Signing in';
   if (pathname === '/') return 'Home';
   if (pathname !== '/dashboard') return 'Page not found';
@@ -277,53 +276,7 @@ function Login() {
       </form>
       <button type="button" className="text-button" onClick={() => { setRegistering(!registering); setError(''); setInfo(''); }}>{registering ? 'Already have an account? Sign in' : 'Create a new account'}</button>
       <a className="google" href={`${API}/auth/google`} onClick={() => { localStorage.removeItem('user'); localStorage.removeItem('token'); }}>Continue with Google</a>
-      <Link className="admin-login" to="/admin-login">Admin sign in</Link>
       <p className="privacy-notice">Your password is securely hashed and never stored in plain text.</p>
-    </section>
-  );
-}
-
-function AdminLogin() {
-  const navigate = useNavigate();
-  const { refresh } = useAuth();
-  const [form, setForm] = useState({ email: '', password: '' });
-  const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-
-  const submit = async (event) => {
-    event.preventDefault();
-    if (submitting) return;
-    setSubmitting(true);
-    setError('');
-    try {
-      const data = await api('/auth/admin', { method: 'POST', body: JSON.stringify(form) });
-      if (data.token) localStorage.setItem('token', data.token);
-      const user = await refresh();
-      navigate(user.role === 'admin' ? '/admin' : '/login');
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <section className="auth-card">
-      <p className="eyebrow">STAFF ACCESS</p>
-      <h1>Admin sign in.</h1>
-      <p className="muted">Use the administrator credentials configured by the deployment owner.</p>
-      <form onSubmit={submit}>
-        <label>
-          Email address
-          <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
-        </label>
-        <label>
-          Password
-          <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
-        </label>
-        {error && <p className="error">{error}</p>}
-        <button className="primary" disabled={submitting}>{submitting ? 'Signing in...' : 'Sign in securely'}</button>
-      </form>
     </section>
   );
 }
@@ -890,5 +843,5 @@ function ThemeProvider({ children }) {
   });
   return <ThemeContext.Provider value={{ theme, toggle }}>{children}</ThemeContext.Provider>;
 }
-function App() { return <ThemeProvider><AuthProvider><Layout><Routes><Route path="/" element={<Navigate to="/dashboard" />} /><Route path="/login" element={<Login />} /><Route path="/privacy" element={<LegalPage type="privacy" />} /><Route path="/terms" element={<LegalPage type="terms" />} /><Route path="/auth/callback" element={<OAuthCallback />} /><Route path="/admin-login" element={<AdminLogin />} /><Route path="/dashboard" element={<Protected role="student"><Dashboard /></Protected>} /><Route path="/complaints" element={<Protected role="student"><Complaints /></Protected>} /><Route path="/profile" element={<Protected role="student"><Profile /></Protected>} /><Route path="/complaints/new" element={<Protected role="student"><NewComplaint /></Protected>} /><Route path="/complaints/:id" element={<Protected><Detail /></Protected>} /><Route path="/admin" element={<Protected role="admin"><Admin /></Protected>} /><Route path="/admin/users" element={<Protected role="admin"><AdminUsers /></Protected>} /><Route path="/admin/users/:id" element={<Protected role="admin"><AdminUserDetail /></Protected>} /><Route path="*" element={<NotFound />} /></Routes></Layout></AuthProvider></ThemeProvider>; }
+function App() { return <ThemeProvider><AuthProvider><Layout><Routes><Route path="/" element={<Navigate to="/dashboard" />} /><Route path="/login" element={<Login />} /><Route path="/privacy" element={<LegalPage type="privacy" />} /><Route path="/terms" element={<LegalPage type="terms" />} /><Route path="/auth/callback" element={<OAuthCallback />} /><Route path="/dashboard" element={<Protected role="student"><Dashboard /></Protected>} /><Route path="/complaints" element={<Protected role="student"><Complaints /></Protected>} /><Route path="/profile" element={<Protected role="student"><Profile /></Protected>} /><Route path="/complaints/new" element={<Protected role="student"><NewComplaint /></Protected>} /><Route path="/complaints/:id" element={<Protected><Detail /></Protected>} /><Route path="/admin" element={<Protected role="admin"><Admin /></Protected>} /><Route path="/admin/users" element={<Protected role="admin"><AdminUsers /></Protected>} /><Route path="/admin/users/:id" element={<Protected role="admin"><AdminUserDetail /></Protected>} /><Route path="*" element={<NotFound />} /></Routes></Layout></AuthProvider></ThemeProvider>; }
 createRoot(document.getElementById('root')).render(<BrowserRouter><App /></BrowserRouter>);

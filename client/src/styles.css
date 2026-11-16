@@ -128,9 +128,8 @@ input:focus, textarea:focus, select:focus { border-color: var(--brand); box-shad
 input::placeholder, textarea::placeholder { color: var(--muted); opacity: .8; }
 textarea { min-height: 150px; resize: vertical; }
 .two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.google, .admin-login { display: block; width: 100%; margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; text-align: center; font-weight: 650; transition: background .18s ease, border-color .18s ease, color .18s ease; }
+.google { display: block; width: 100%; margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; text-align: center; font-weight: 650; transition: background .18s ease, border-color .18s ease, color .18s ease; }
 .google:hover { background: var(--surface-muted); border-color: var(--brand); color: var(--brand); }
-.admin-login { border: 0; color: var(--brand); }
 .privacy-notice, .contact-links { color: var(--muted); font-size: .9rem; }
 .profile-stack { display: grid; gap: 36px; padding-top: 12px; }
 .profile-stack .panel { width: min(760px, 100%); margin-inline: auto; }
